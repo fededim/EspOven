@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Access-Control-Allow-Origin" content="*"/>
+
+<script>
+var refreshDelay=1000; // 1 sec
+
+function doAjaxReq(url,loadfunc,queryparams) {
+	if (queryparams) {	
+		var querystring = Object.keys(queryparams).map(function (el,idx,arr) {
+			return encodeURIComponent(el)+'='+encodeURIComponent(queryparams[el]);
+		}).join('&');
+		
+		url=url+"?"+querystring;
+	}
+
+	var req = new XMLHttpRequest();
+	req.timeout = 500; // time in milliseconds
+	req.onload = function () {
+				loadfunc(req);
+	};
+	req.ontimeout = function () {
+				loadfunc(req);
+    };
+	req.open("GET", url, true);
+	req.send();
+}
+
+
+function TimeToSec(time) {
+	return time.split(':').reverse().reduce(function (prev, curr, i) { prev + curr*Math.pow(60, i) }, 0);
+}
+
+function setParams(enabled) {
+	var params = {
+		setChamber: document.mainform["setChamber"].value,
+		setStone: document.mainform["setStone"].value,
+		timer: TimeToSec(document.mainform["timer"].value),
+		started: enabled
+	};
+
+	doAjaxReq("/setparams.cgi",function (req) {
+		if (req.status != 200)
+			alert("Unable to contact EspOpen server, please check that the oven is turned on");
+		},params);
+
+	return false;		
+}
+
+
+function updateSensorData() {
+	doAjaxReq("/getsensordata.cgi",function (req) {
+			if (req.status==200) {
+				obj=JSON.parse(req.responseText);
+				document.getElementById('tempChamber').textContent=obj.tempChamber;
+				document.getElementById('tempStone').textContent=obj.tempStone;
+				document.getElementById('timer').textContent=new Date(obj.timer * 1000).toISOString().substr(11, 8);
+				document.getElementById('chamberStatus').textContent=obj.chamberStatus;
+				document.getElementById('stoneStatus').textContent=obj.stoneStatus;
+				document.getElementById('lastUpd').textContent=(new Date().toLocaleTimeString());
+
+				document.getElementById('tempChamber').style.color = obj.started?'green':null;
+				document.getElementById('tempStone').style.color = obj.started?'green':null;
+				document.getElementById('timer').style.color = obj.started?'green':null;
+				document.getElementById('chamberStatus').style.color = obj.started?'green':null;
+				document.getElementById('stoneStatus').style.color = obj.started?'green':null;
+				document.getElementById('lastUpd').style.color = obj.started?'green':null;
+			}
+			else {
+				document.getElementById('tempChamber').style.color = 'red';
+				document.getElementById('tempStone').style.color = 'red';
+				document.getElementById('timer').style.color = 'red';
+				document.getElementById('chamberStatus').style.color = 'red';
+				document.getElementById('stoneStatus').style.color = 'red';
+				document.getElementById('lastUpd').style.color = 'red';
+			}
+		});
+	}
+</script>
+<title>
+EspOven v1.0
+</title>
+</head>
+<body onload="javascript:setInterval(updateSensorData, refreshDelay);"> 
+<h1>EspOven v1.0</h1>
+<p>Welcome to your thermo controlled IOT oven.</p>
+<p>You can set the two temperatures for both the upper chamber and the refractory stone and a timer for cooking time.</p>
+
+
+<h2>Settings</h2>
+<form name="mainform">
+  Chamber Temperature:<br />
+  <input type="number" name="setChamber" size="3" max="380" min="20" value="320" required /> Actual: <span id="tempChamber">0</span><br />
+  Stone Temperature:<br />
+  <input type="number" name="setStone" size="3" max="380" min="20" value="300" required /> Actual: <span id="tempStone">0</span><br />
+  Timer:<br />
+  <input type="time" name="timer" step="1" value="00:00:10">
+  <br /><br />
+  <button id="start" name="submit" value="1" onclick="return setParams(1);">Start</button>
+  <button id="stop" name="submit"  value="0" onclick="return setParams(0);">Stop</button>
+</form>
+
+<h2>Status</h2>
+
+Timer: <span id="timer">00:00</span><br /> <br />
+Chamber probe:  <span id="chamberStatus">Ok</span><br /> <br />
+Stone probe: <span id="stoneStatus">Ok</span><br /> <br />
+Last update: <span id="lastUpd"></span><br /> <br />
+</body>
+</html>
