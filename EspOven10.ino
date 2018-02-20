@@ -63,7 +63,7 @@ MAX31855 probeStone(D4);
 #define stricmp strcasecmp
 
 const char* ssid = "Telecom-2G";
-const char* password = "!provolone!";
+const char* password = "xxxxyyyy";
 
 WiFiServer server(80);
 
