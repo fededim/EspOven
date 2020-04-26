@@ -1,3 +1,25 @@
+/*******************************************************************************
+ * Copyright (c) 2017 Federico Di Marco <fededim@gmail.com>                    *
+ *                                                                             *
+ * Permission is hereby granted, free of charge, to any person obtaining a     *
+ * copy of this software and associated documentation files (the "Software"),  *
+ * to deal in the Software without restriction, including without limitation   *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,    *
+ * and/or sell copies of the Software, and to permit persons to whom the       *
+ * Software is furnished to do so, subject to the following conditions:        *
+ *                                                                             *
+ * The above copyright notice and this permission notice shall be included in  *
+ * all copies or substantial portions of the Software.                         *
+ *                                                                             *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR  *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,    *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE *
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER      *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING     *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER         *
+ * DEALINGS IN THE SOFTWARE.                                                   *
+ *******************************************************************************/
+ 
 #include <stdlib.h>
 #include "PidAutotuneControl.h"
 #include "IControl.h"
@@ -7,11 +29,10 @@
 
   void PidAutotuneControl::Reset() {
     pidtuning->Cancel();
-    tuning=false;
     numStable=0;
-    tuningDone=false;    
-    
-    action->Off();
+    status=PidAutotuneStatus::Init;
+
+    PidControl::Control(false);
   }
 
   
@@ -21,6 +42,10 @@
     setTemp=set;
     pidtuning=new PID_ATune(&setTemp,actual);
     pidtuning->SetControlType(1); // PID
+    pidtuning->SetNoiseBand(0.5);  // half degree
+    pidtuning->SetOutputStep(10);  // 10 degree
+    pidtuning->SetLookbackSec(20); // 20 seconds
+   
     Reset();
   }
 
@@ -33,56 +58,52 @@
 
 
   void PidAutotuneControl::Control(bool started) {
-    unsigned long now = millis();
-
-    //time to shift the Relay Window (could skip window if too much time has passed)
-    if ((now - windowStartTime) > windowsize)
-      windowStartTime += windowsize;
-
+    if (status==PidAutotuneStatus::Done)
+      return;
+    
     if (!started) {
         Reset();
         return;
     }
 
-    if (tuning) {
-      Serial.printf("EspOven: PidAutotuneControl before autotuning output %f\n",output);
-      // pidtuning->Runtime steps the stable output to understand how actual values change accordingly, this must be repeated around 10 times
+    // tuning starts when we have reached the setTemp and it is stabilized.
+    if (status==PidAutotuneStatus::Tuning) {
+      // pidtuning->Runtime steps the stable output to understand how actual values change accordingly, this must be repeated till it returns a value!=0
       if (pidtuning->Runtime()!=0) {
+        PidControl::Control(false);
+
         tunedKp=pidtuning->GetKp();
         tunedKi=pidtuning->GetKi();
         tunedKd=pidtuning->GetKd();
 
-        action->Off();
-        tuning=false;
-        tuningDone=true;
-
+        status=PidAutotuneStatus::Done;
+        
         Serial.printf("EspOven: PidAutotuneControl autotuning done, tuned Kp %f Ki %f Kd %d\n",tunedKp,tunedKi,tunedKd);
       }
       else {
-        Serial.printf("EspOven: PidAutotuneControl after autotuning %s set %f actual %f output %f now %d windowStartTime %d (now - windowStartTime) %d\n",name,setTemp,*actual,output, now, windowStartTime, (now - windowStartTime)); 
+        Serial.printf("EspOven: PidAutotuneControl autotuning %s set %f actual %f\n",name,setTemp,*actual); 
 
-        if (output > (now - windowStartTime)) {
-          action->On();
-        }
-        else {
-          action->Off();
-        }  
+        PidControl::Control(true);
       }
     }
     else {
-      // We need first to stabilize actual to set temp by using standard pid control (25 cycles)
+      if (status==PidAutotuneStatus::Init)
+        status=PidAutotuneStatus::Stabilization;
+      
+      // Before the tuning starts, we need first to stabilize actual to set temp by using standard pid control (25 cycles)
       PidControl::Control(true);
 
-      if (!tuning && (setTemp-*actual)<DELTA_STABILIZATION) {
+      if (abs(setTemp-*actual)<DELTA_STABILIZATION) {
         if (numStable++>25) {
-          tuning=true;
+          status=PidAutotuneStatus::Tuning;
           numStable=0;
-          Serial.printf("EspOven: PidAutotuneControl set and actual temp stabilized, turning on the autotuning process\n");
+          Serial.printf("EspOven: PidAutotuneControl actual temp stabilized, moving to the tuning process\n");
         }
       }
       else {
         numStable=0;
       }
+
+      Serial.printf("EspOven: PidAutotuneControl waiting for temp stabilization, set %f actual %f numStable %d\n",setTemp,*actual,numStable);   
     }
   }
-
