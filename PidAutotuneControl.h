@@ -1,4 +1,4 @@
-/********************************** max31855k.h ********************************
+/*******************************************************************************
  * Copyright (c) 2017 Federico Di Marco <fededim@gmail.com>                    *
  *                                                                             *
  * Permission is hereby granted, free of charge, to any person obtaining a     *
@@ -28,6 +28,8 @@
 #include "PID_AutoTune.h"
 #include "PidControl.h"
 
+enum PidAutotuneStatus { Init=0, Stabilization=1, Tuning=2, Done=3};
+
 class PidAutotuneControl: public PidControl {
 
 public:
@@ -39,15 +41,13 @@ public:
   virtual ControlType GetControlType() override;
   void Reset();
 
-  bool tuningDone;
+  PidAutotuneStatus status;
   double tunedKp,tunedKi,tunedKd;
   
   protected:
     PID_ATune *pidtuning;
     double setTemp;
-    bool tuning;
     int numStable;
 };
-
+ 
 #endif
-

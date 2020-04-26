@@ -1,4 +1,4 @@
-/*************************** MAX31855.cpp *****************************
+/*******************************************************************************
  * Copyright (c) 2017 Federico Di Marco <fededim@gmail.com>                    *
  *                                                                             *
  * Permission is hereby granted, free of charge, to any person obtaining a     *
@@ -207,4 +207,3 @@ MAX31855::probeStatus MAX31855::checkStatus(void)
 
   return ft;
 }
-

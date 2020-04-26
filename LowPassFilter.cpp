@@ -1,4 +1,4 @@
-/********************************** max31855k.h ********************************
+/*******************************************************************************
  * Copyright (c) 2017 Federico Di Marco <fededim@gmail.com>                    *
  *                                                                             *
  * Permission is hereby granted, free of charge, to any person obtaining a     *
@@ -41,4 +41,3 @@ double LowPassFilter::GetFilteredValue(double val) {
 
   return ris;
 }
-

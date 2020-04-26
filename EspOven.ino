@@ -1,3 +1,27 @@
+/*******************************************************************************
+ * Copyright (c) 2017 Federico Di Marco <fededim@gmail.com>                    *
+ *                                                                             *
+ * Permission is hereby granted, free of charge, to any person obtaining a     *
+ * copy of this software and associated documentation files (the "Software"),  *
+ * to deal in the Software without restriction, including without limitation   *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,    *
+ * and/or sell copies of the Software, and to permit persons to whom the       *
+ * Software is furnished to do so, subject to the following conditions:        *
+ *                                                                             *
+ * The above copyright notice and this permission notice shall be included in  *
+ * all copies or substantial portions of the Software.                         *
+ *                                                                             *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR  *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,    *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE *
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER      *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING     *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER         *
+ * DEALINGS IN THE SOFTWARE.                                                   *
+ *                                                                             *
+ *                                                                             *
+ *******************************************************************************/
+ 
 #include <ESP8266WiFi.h>
 #include <mem.h>
 #include "FS.h"
@@ -14,32 +38,33 @@
 
 #include "pitches.h"
 
-//const int doPin = 13;
-//const int clPin = 14;
+
+#define SSID  "<SSID>"         // wifi ssid to connect
+#define PASSWORD "<PASSWORD>"  // ssid password
+
+#define PID_WINDOW_SIZE 5000  // PID window size in ms
+
+#define NTP_OFFSET   60 * 60      // In seconds
+#define NTP_INTERVAL 60 * 1000    // In miliseconds
+#define NTP_ADDRESS  "europe.pool.ntp.org"
+
+#define DELTA 1  // OnOff delta abs value
+
 
 // ESP 8266
 // The I2C Bus signals SCL and SDA have been assigned to D1 and D2 (GPIO5 & GPIO4) while the four
 // SPI Bus signals (SCK, MISO, MOSI & SS) have been assigned to GPIO pins 14, 12, 13 and 15, respectively)
 
-// State variables
-double tempChamber, tempStone, setChamber = 100, setStone=200,cjChamber=0, cjStone=0;
-int timer, starttimer, chamberStatus, stoneStatus;
-bool started=false;
-
-unsigned long start; // test 
-int ste=0;  // test
+#define PIN_RELAY_CHAMBER D8
 
 #define GPIO16_RELAY
 #define GPIO05_BUZZER
 
-#define WINDOW_SIZE 15000  // 15s
-
-#define PIN_RELAY_CHAMBER D8
 
 #ifdef  GPIO16_RELAY
   #define PIN_RELAY_STONE   D0
 #else
-  #define PIN_NINT   D0
+  #define PIN_NINT          D0
   #define PIN_RELAY_STONE   114 // on the sx1509 > 100
 #endif
 
@@ -51,19 +76,19 @@ int ste=0;  // test
   #define PIN_BUZZER        115 // on the sx1509 >100
 #endif
 
+// State variables
+double tempChamber, tempStone, setChamber = 100, setStone=200,cjChamber=0, cjStone=0;
+int timer, starttimer, chamberStatus, stoneStatus;
+bool started=false;
+
+unsigned long start; // test 
+int ste=0;  // test
+
+
 MAX31855 probeChamber(D3);
 MAX31855 probeStone(D4);
 
-#define NTP_OFFSET   60 * 60      // In seconds
-#define NTP_INTERVAL 60 * 1000    // In miliseconds
-#define NTP_ADDRESS  "europe.pool.ntp.org"
-
-#define DELTA 0.02  // 2%
-
 #define stricmp strcasecmp
-
-const char* ssid = "Telecom-2G";
-const char* password = "xxxxyyyy";
 
 WiFiServer server(80);
 
@@ -111,7 +136,7 @@ void setup()
 
 
   actChamber.Off();
-  actStone.On();
+  actStone.Off();
   
   pinMode(PIN_BUZZER, OUTPUT);
   digitalWrite(PIN_BUZZER,LOW);  // turn off the speaker
@@ -131,17 +156,22 @@ void setup()
   Serial.printf("EspOven: Web server started, open %s in a web browser port 80\n", WiFi.localIP().toString().c_str());
 
   conf=new Configuration();
-  conf->Load();
-
-  conf->enable1=true;
-  conf->enable2=true;
-  conf->kp2=100;
-  conf->ki2=5;
-  conf->kd2=1;
-  conf->alpha1=1;
-  conf->alpha2=1;
-  conf->control1=ControlType::OnOff;
-
+  if (!conf->Load()) {
+    // Default configuration if flash memory is uninitialised
+    conf->enable1=false;    // chamber heater and probe present
+    conf->enable2=true;     // stone heater and probe present
+    conf->kp1=100;          // PID KP constant for chamber heater control
+    conf->ki1=5;            // PID KI constant for chamber heater control
+    conf->kd1=1;            // PID KD constant for chamber heater control
+    conf->kp2=100;          // PID KP constant for stone heater control
+    conf->ki2=5;            // PID KI constant for stone heater control
+    conf->kd2=1;            // PID KD constant for stone heater control
+    conf->alpha1=1;         // Lowpass filter alpha value for chamber temperature
+    conf->alpha2=1;         // Lowpass filter alpha value for stone temperature
+    conf->control1=ControlType::OnOff;  // Control Type for chamber heater
+    conf->control2=ControlType::OnOff;  // Control Type for stone heater
+  }
+  
   UpdateParams();
   
   start=millis();
@@ -167,7 +197,7 @@ void UpdateParams() {
   if (conf->control1==ControlType::OnOff)
     chamberControl=new OnOffControl("chamber",&actChamber,&setChamber,&tempChamber,DELTA);
   else
-    chamberControl=new PidControl("chamber",&actChamber,&setChamber,&tempChamber,conf->kp1,conf->ki1,conf->kd1,WINDOW_SIZE);
+    chamberControl=new PidControl("chamber",&actChamber,&setChamber,&tempChamber,conf->kp1,conf->ki1,conf->kd1,PID_WINDOW_SIZE);
 
   
   // Stone control
@@ -177,7 +207,7 @@ void UpdateParams() {
   if (conf->control2==ControlType::OnOff)
     stoneControl=new OnOffControl("stone",&actStone,&setChamber,&tempChamber,DELTA);
   else
-    stoneControl=new PidControl("stone",&actStone,&setChamber,&tempChamber,conf->kp2,conf->ki2,conf->kd2,WINDOW_SIZE);  
+    stoneControl=new PidControl("stone",&actStone,&setChamber,&tempChamber,conf->kp2,conf->ki2,conf->kd2,PID_WINDOW_SIZE);  
     
 }
 
@@ -187,9 +217,9 @@ void CheckConnectWifi()
 {
   if (WiFi.status() != WL_CONNECTED) {
     WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
+    WiFi.begin(SSID, PASSWORD);
   
-    Serial.printf("EspOven: Connecting to %s", ssid);
+    Serial.printf("EspOven: Connecting to %s", SSID);
     while (WiFi.status() != WL_CONNECTED)
     {
       delay(500);
@@ -244,7 +274,7 @@ char *getTimestamp() {
 }
 
 
-void parseQueryString(char *querystring, JsonObject& ht) {
+void parseQueryString(char *querystring, JsonObject ht) {
   char *paramstk, *paramsend, *key, *value, *paramend;
 
   // split parameters by &
@@ -261,7 +291,7 @@ void parseQueryString(char *querystring, JsonObject& ht) {
     if (value == NULL)
       value = "";
 
-    ht.set(key, value);
+    ht[key]=value;
     Serial.printf("EspOven: Parsed key %s value %s\n", key,value);
 
     paramstk = strtok_r(NULL, "&", &paramsend);
@@ -274,8 +304,8 @@ bool HandleCGI(char *path, char *resp) {
   char buf[256];
   bool handled = true;
 
-  StaticJsonBuffer<128> jsonBuffer;
-  JsonObject& ht = jsonBuffer.createObject();
+  StaticJsonDocument<128> jsonBuffer;
+  JsonObject ht = jsonBuffer.to<JsonObject>();
 
   if (strncmp(path, "/getsensordata.cgi", 18) == 0) {
     // JSON object
@@ -289,10 +319,10 @@ bool HandleCGI(char *path, char *resp) {
 
     int c, s;
 
-    c = ht.get<int>("setChamber");
-    s = ht.get<int>("setStone");
+    c = ht["setChamber"].as<int>();
+    s = ht["setStone"].as<int>();
 
-    Serial.printf("EspOven: setparams.cgi parsed setChamber %d setStone %d timer %d started %d\n", c,s, ht.get<int>("timer"), ht.get<int>("started"));
+    Serial.printf("EspOven: setparams.cgi parsed setChamber %d setStone %d timer %d started %d\n", c,s, ht["timer"].as<int>(), ht["started"].as<int>());
 
     // basic checks on temperature
     if (c > 20 && c < 380)
@@ -303,7 +333,7 @@ bool HandleCGI(char *path, char *resp) {
 
     // if oven is turned on we can update the temperatures, but not the timer, we check on previous value
     if (!started) {
-      timer=ht.get<int>("timer");
+      timer=ht["timer"].as<int>();
 
       if (timer!=0) {
         starttimer=millis();
@@ -311,7 +341,7 @@ bool HandleCGI(char *path, char *resp) {
       }
     }
     
-    started = ht.get<int>("started");
+    started = ht["started"].as<int>();
     if (started==0)
       timer=0;
 
@@ -520,4 +550,3 @@ void loop() {
 
   delay(100);
 }
-

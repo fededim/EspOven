@@ -1,4 +1,4 @@
-/********************************** max31855k.h ********************************
+/*******************************************************************************
  * Copyright (c) 2017 Federico Di Marco <fededim@gmail.com>                    *
  *                                                                             *
  * Permission is hereby granted, free of charge, to any person obtaining a     *
@@ -27,9 +27,9 @@
 #include <ArduinoJson.h>
 
   char *Configuration::GetJson(char *buf, int len) {
-    StaticJsonBuffer<256> jsonBuffer;
+    StaticJsonDocument<256> jsonBuffer;
 
-    JsonObject& root = jsonBuffer.createObject();
+    JsonObject root = jsonBuffer.to<JsonObject>();
     root["enable1"] = enable1;
     root["control1"] = (int) control1;
     root["autopid1"] = autopid1;
@@ -53,7 +53,7 @@
     //data.add(48.756080);
     //data.add(2.302038);
         
-    root.printTo(buf,len);
+    serializeJsonPretty(root,buf,len);
     Serial.printf("Configuration: GetJson returned %s\n",buf);    
 
     return buf;
@@ -64,31 +64,31 @@
 
   // no checking on values is enforced, we are in an embedded system inside our lan so it should be safe...in the worst case it will set default values
   bool Configuration::SetJson(char *buf) {
-    StaticJsonBuffer<256> jsonBuffer;
+    StaticJsonDocument<256> root;
 
-    JsonObject& root = jsonBuffer.parseObject(buf);
-    if (!root.success()) {
+    DeserializationError err = deserializeJson(root,buf);
+    if (err!=DeserializationError::Ok) {
       Serial.printf("Configuration: SetJson error parsing %s\n",buf);
       return false;
     }
     enable1=root["enable1"];
-    control1=(ControlType) root.get<int>("control1");
+    control1=(ControlType) root["control1"].as<int>();
     autopid1=root["autopid1"];
-    kp1=root.get<double>("kp1");
-    kd1=root.get<double>("kd1");
-    ki1=root.get<double>("ki1");
-    alpha1=root.get<double>("alpha1");
+    kp1=root["kp1"].as<double>();
+    kd1=root["kd1"].as<double>();
+    ki1=root["ki1"].as<double>();
+    alpha1=root["alpha1"].as<double>();
 
     enable2=root["enable2"];
-    control2=(ControlType) root.get<int>("control2");
+    control2=(ControlType) root["control2"].as<int>();
     autopid2=root["autopid2"];
-    kp2=root.get<double>("kp2");
-    kd2=root.get<double>("kd2");
-    ki2=root.get<double>("ki2");
-    alpha2=root.get<double>("alpha2");
+    kp2=root["kp2"].as<double>();
+    kd2=root["kd2"].as<double>();
+    ki2=root["ki2"].as<double>();
+    alpha2=root["alpha2"].as<double>();
 
-    io5Sel=(GPIO05Sel) root.get<int>("io5Sel");
-    io16Sel=(GPIO16Sel) root.get<int>("io16Sel");
+    io5Sel=(GPIO05Sel) root["io5Sel"].as<int>();
+    io16Sel=(GPIO16Sel) root["io16Sel"].as<int>();
     
     Serial.printf("Configuration: SetJson successfully set %s\n",buf);    
 
@@ -123,4 +123,3 @@
 
     return ris;
   }
-
