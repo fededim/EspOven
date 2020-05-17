@@ -6,7 +6,7 @@
 <script>
 var refreshDelay=1000; // 1 sec
 
-function doAjaxReq(url,loadfunc,queryparams) {
+function doAjaxGet(url,loadfunc,queryparams) {
 	if (queryparams) {	
 		var querystring = Object.keys(queryparams).map(function (el,idx,arr) {
 			return encodeURIComponent(el)+'='+encodeURIComponent(queryparams[el]);
@@ -40,7 +40,7 @@ function setParams(enabled) {
 		started: enabled
 	};
 
-	doAjaxReq("/setparams.cgi",function (req) {
+	doAjaxGet("/setparams.cgi",function (req) {
 		if (req.status != 200)
 			alert("Unable to contact EspOpen server, please check that the oven is turned on");
 		},params);
@@ -50,7 +50,7 @@ function setParams(enabled) {
 
 
 function updateSensorData() {
-	doAjaxReq("/getsensordata.cgi",function (req) {
+	doAjaxGet("/getsensordata.cgi",function (req) {
 			if (req.status==200) {
 				obj=JSON.parse(req.responseText);
 				document.getElementById('tempChamber').textContent=obj.tempChamber;

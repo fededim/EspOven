@@ -36,11 +36,10 @@
   }
 
   
-  PidAutotuneControl::PidAutotuneControl(const char *_name, IControlAction *_action, double set, double *actual, double initialKp, double initialKi, double initialKd, int windowsize) :
-      PidControl(_name,_action,&setTemp,actual,initialKp,initialKi,initialKd,windowsize)
+  PidAutotuneControl::PidAutotuneControl(const char *_name, IControlAction *_action, double *set, double *actual, double initialKp, double initialKi, double initialKd, int windowsize) :
+      PidControl(_name,_action,set,actual,initialKp,initialKi,initialKd,windowsize)
   {    
-    setTemp=set;
-    pidtuning=new PID_ATune(&setTemp,actual);
+    pidtuning=new PID_ATune(set,actual);
     pidtuning->SetControlType(1); // PID
     pidtuning->SetNoiseBand(0.5);  // half degree
     pidtuning->SetOutputStep(10);  // 10 degree
@@ -81,7 +80,7 @@
         Serial.printf("EspOven: PidAutotuneControl autotuning done, tuned Kp %f Ki %f Kd %d\n",tunedKp,tunedKi,tunedKd);
       }
       else {
-        Serial.printf("EspOven: PidAutotuneControl autotuning %s set %f actual %f\n",name,setTemp,*actual); 
+        Serial.printf("EspOven: PidAutotuneControl autotuning %s set %f actual %f\n",name,*set,*actual); 
 
         PidControl::Control(true);
       }
@@ -93,7 +92,7 @@
       // Before the tuning starts, we need first to stabilize actual to set temp by using standard pid control (25 cycles)
       PidControl::Control(true);
 
-      if (abs(setTemp-*actual)<DELTA_STABILIZATION) {
+      if (abs(*set-*actual)<DELTA_STABILIZATION) {
         if (numStable++>25) {
           status=PidAutotuneStatus::Tuning;
           numStable=0;
@@ -104,6 +103,10 @@
         numStable=0;
       }
 
-      Serial.printf("EspOven: PidAutotuneControl waiting for temp stabilization, set %f actual %f numStable %d\n",setTemp,*actual,numStable);   
+      Serial.printf("EspOven: PidAutotuneControl waiting for temp stabilization, set %f actual %f numStable %d\n",*set,*actual,numStable);   
     }
+  }
+
+ControlType PidAutotuneControl::GetControlType() {
+    return ControlType::PIDAutotune;
   }

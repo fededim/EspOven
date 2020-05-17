@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Access-Control-Allow-Origin" content="*"/>
+
+<script>
+var refreshDelay=1000; // 1 sec
+
+function doAjaxPost(url,loadfunc,body) {
+	var req = new XMLHttpRequest();
+	req.timeout = 500; // time in milliseconds
+	req.onreadystatechange = function () {
+				if (req.readyState == 4)
+					loadfunc(req);
+	};
+	req.ontimeout = function () {
+				loadfunc(req);
+    };
+	req.open("POST", url, true);
+	req.setRequestHeader("Content-Type", "application/json");
+
+	req.send(JSON.stringify(body));
+}
+
+
+
+function doAjaxGet(url,loadfunc,queryparams) {
+	if (queryparams) {	
+		var querystring = Object.keys(queryparams).map(function (el,idx,arr) {
+			return encodeURIComponent(el)+'='+encodeURIComponent(queryparams[el]);
+		}).join('&');
+		
+		url=url+"?"+querystring;
+	}
+
+	var req = new XMLHttpRequest();
+	req.timeout = 500; // time in milliseconds
+	req.onload = function () {
+				loadfunc(req);
+	};
+	req.ontimeout = function () {
+				loadfunc(req);
+    };
+	req.open("GET", url, true);
+	req.send();
+}
+
+
+function TimeToSec(time) {
+	return time.split(':').reverse().reduce(function (prev, curr, i) { prev + curr*Math.pow(60, i) }, 0);
+}
+
+function setConf() {
+	var params = {
+		enable1: document.mainform["enable1"].value,
+		control1: document.mainform["control1"].value,
+		kp1: document.mainform["kp1"].value,
+		ki1: document.mainform["ki1"].value,
+		kd1: document.mainform["kd1"].value,
+		alpha1: document.mainform["alpha1"].value,
+
+		enable2: document.mainform["enable2"].value,
+		control2: document.mainform["control2"].value,
+		kp2: document.mainform["kp2"].value,
+		ki2: document.mainform["ki2"].value,
+		kd2: document.mainform["kd2"].value,
+		alpha2: document.mainform["alpha2"].value
+	};
+
+	doAjaxPost("/setconf.cgi",function (req) {
+		if (req.status != 200)
+			alert("Unable to contact EspOpen server, please check that the oven is turned on");
+		},params);
+
+	return false;		
+}
+
+
+
+function loadConf() {
+	doAjaxGet("/getconf.cgi",function (req) {
+			if (req.status==200) {
+				obj=JSON.parse(req.responseText);
+
+				for (prop in obj)
+					if (document.mainform[prop])
+						document.mainform[prop].value=obj[prop];
+			}
+		});
+		
+	return false;
+}
+
+
+</script>
+<title>
+EspOven Configuration
+</title>
+</head>
+<body onload="loadConf"> 
+<h1>EspOven Configuration</h1>
+<p>Welcome to your thermo controlled IOT oven.</p>
+<p>You can change the configuration settings below.</p>
+
+
+<h2>Settings</h2>
+<form name="mainform">
+  <h3>Relay1</h3>
+
+  Enable:<br />
+  <input type="checkbox" name="enable1" value="false" required /></br>
+  
+  ControlType:<br />
+  <select name="control1" required />
+  <option value="1">On Off</option>
+  <option value="2">PID</option>
+  <option value="3">PID Autotune</option>
+  </select>
+  </br>
+  
+  PID Kp:<br />
+  <input type="number" name="kp1" step="any" value="100" required /><br />
+
+  PID Ki:<br />
+  <input type="number" name="ki1" step="any" value="5" required /><br />
+
+  PID Kd:<br />
+  <input type="number" name="kd1" step="any" value="1" required /><br />
+
+  <h3>Relay2</h3>
+
+  Enable:<br />
+  <input type="checkbox" name="enable2" value="false" required /></br>
+  
+  ControlType:<br />
+  <select name="control2" required />
+  <option value="1">On Off</option>
+  <option value="2">PID</option>
+  <option value="3">PID Autotune</option>
+  </select>
+  </br>
+  
+  PID Kp:<br />
+  <input type="number" name="kp2" step="any" value="100" required /><br />
+
+  PID Ki:<br />
+  <input type="number" name="ki2" step="any" value="5" required /><br />
+
+  PID Kd:<br />
+  <input type="number" name="kd2" step="any" value="1" required /><br />
+
+  <h3>Thermo1</h3>
+  
+  Alpha factor:<br />
+  <input type="number" name="alpha1" step="0.01" max="1.0" min="0" value="0.30" required /><br /> 
+
+  <h3>Thermo2</h3>
+  
+  Alpha factor:<br />
+  <input type="number" name="alpha2" step="0.01" max="1.0" min="0" value="0.30" required /><br /> 
+  
+  <br />
+  <button id="load" onclick="return loadConf();">Load</button>
+  <button id="save" onclick="return setConf();">Save</button>
+</form>
+
+<h2>Status</h2>
+
+Last update: <span id="lastUpd"></span><br /> <br />
+</body>
+</html>

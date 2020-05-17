@@ -25,21 +25,15 @@
 
 #include "IControl.h"
 
-enum class GPIO05Sel { Relay=1, nInt=2 };
-enum class GPIO16Sel { Buzzer=1, Scl=2 };
-
 class Configuration {
   public:
-    bool enable1,autopid1;
+    bool enable1;
     ControlType control1;
     double kp1,kd1,ki1,alpha1;  // parameters for pid / on off control
 
-    bool enable2,autopid2;
+    bool enable2;
     ControlType control2;
     double kp2,kd2,ki2,alpha2;  // parameters for pid / on off control
-
-    GPIO05Sel io5Sel;
-    GPIO16Sel io16Sel;
 
     char *GetJson(char *buf, int len);
     bool SetJson(char *buf);

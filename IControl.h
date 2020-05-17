@@ -28,7 +28,7 @@
 #include <ESP8266WiFi.h>
 
 
-enum class ControlType { OnOff=1, PID=2};
+enum class ControlType { OnOff=1, PID=2, PIDAutotune=3 };
 
 
 // Simple interface to implement the on/off actions called by IControl interface

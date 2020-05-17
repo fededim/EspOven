@@ -34,7 +34,7 @@ class PidAutotuneControl: public PidControl {
 
 public:
   // set temperature must be fixed at a fixed value for all tuning process
-  PidAutotuneControl(const char *_name, IControlAction *_action, double set, double *actual, double initialKp, double initialKi, double initialKd, int windowsize);
+  PidAutotuneControl(const char *_name, IControlAction *_action, double *set, double *actual, double initialKp, double initialKi, double initialKd, int windowsize);
   ~PidAutotuneControl();
 
   virtual void Control(bool started) override;

@@ -32,7 +32,6 @@
     JsonObject root = jsonBuffer.to<JsonObject>();
     root["enable1"] = enable1;
     root["control1"] = (int) control1;
-    root["autopid1"] = autopid1;
     root["ki1"] = (double) ki1;
     root["kd1"] = (double) kd1;
     root["kp1"] = (double) kp1;
@@ -40,18 +39,10 @@
 
     root["enable2"] = enable2;
     root["control2"] = (int) control2;
-    root["autopid2"] = autopid2;
     root["ki2"] = (double) ki2;
     root["kd2"] = (double) kd2;
     root["kp2"] = (double) kp2;
     root["alpha2"] = (double) alpha2;
-
-    root["io5Sel"] = (int) io5Sel;
-    root["io16Sel"] = (int) io16Sel;
-
-    //JsonArray& data = root.createNestedArray("data");
-    //data.add(48.756080);
-    //data.add(2.302038);
         
     serializeJsonPretty(root,buf,len);
     Serial.printf("Configuration: GetJson returned %s\n",buf);    
@@ -73,7 +64,6 @@
     }
     enable1=root["enable1"];
     control1=(ControlType) root["control1"].as<int>();
-    autopid1=root["autopid1"];
     kp1=root["kp1"].as<double>();
     kd1=root["kd1"].as<double>();
     ki1=root["ki1"].as<double>();
@@ -81,15 +71,11 @@
 
     enable2=root["enable2"];
     control2=(ControlType) root["control2"].as<int>();
-    autopid2=root["autopid2"];
     kp2=root["kp2"].as<double>();
     kd2=root["kd2"].as<double>();
     ki2=root["ki2"].as<double>();
     alpha2=root["alpha2"].as<double>();
 
-    io5Sel=(GPIO05Sel) root["io5Sel"].as<int>();
-    io16Sel=(GPIO16Sel) root["io16Sel"].as<int>();
-    
     Serial.printf("Configuration: SetJson successfully set %s\n",buf);    
 
     return true;

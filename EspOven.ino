@@ -31,6 +31,7 @@
 #include <ArduinoJson.h>
 
 #include "MAX31855.h"
+#include "PidAutotuneControl.h"
 #include "PidControl.h"
 #include "OnOffControl.h"
 #include "configuration.h"
@@ -54,18 +55,20 @@
 // ESP 8266
 // The I2C Bus signals SCL and SDA have been assigned to D1 and D2 (GPIO5 & GPIO4) while the four
 // SPI Bus signals (SCK, MISO, MOSI & SS) have been assigned to GPIO pins 14, 12, 13 and 15, respectively)
-
-#define PIN_RELAY_CHAMBER D8
+  
 
 #define GPIO16_RELAY
 #define GPIO05_BUZZER
 
+#define PIN_RELAY1          D8  
+#define PIN_THERMO1         D3
+#define PIN_THERMO2         D4
 
 #ifdef  GPIO16_RELAY
-  #define PIN_RELAY_STONE   D0
+  #define PIN_RELAY2        D0
 #else
   #define PIN_NINT          D0
-  #define PIN_RELAY_STONE   114 // on the sx1509 > 100
+  #define PIN_RELAY2        114 // on the sx1509 > 100
 #endif
 
 
@@ -76,6 +79,16 @@
   #define PIN_BUZZER        115 // on the sx1509 >100
 #endif
 
+
+// Board configuration (edit accordingly)
+
+#define PIN_RELAY_CHAMBER   PIN_RELAY1
+#define PIN_RELAY_STONE     PIN_RELAY2
+
+MAX31855 probeChamber(PIN_THERMO1);
+MAX31855 probeStone(PIN_THERMO2);
+
+
 // State variables
 double tempChamber, tempStone, setChamber = 100, setStone=200,cjChamber=0, cjStone=0;
 int timer, starttimer, chamberStatus, stoneStatus;
@@ -85,8 +98,6 @@ unsigned long start; // test
 int ste=0;  // test
 
 
-MAX31855 probeChamber(D3);
-MAX31855 probeStone(D4);
 
 #define stricmp strcasecmp
 
@@ -166,8 +177,8 @@ void setup()
     conf->kp2=100;          // PID KP constant for stone heater control
     conf->ki2=5;            // PID KI constant for stone heater control
     conf->kd2=1;            // PID KD constant for stone heater control
-    conf->alpha1=1;         // Lowpass filter alpha value for chamber temperature
-    conf->alpha2=1;         // Lowpass filter alpha value for stone temperature
+    conf->alpha1=0.3;       // Lowpass filter alpha value for chamber temperature
+    conf->alpha2=0.3;       // Lowpass filter alpha value for stone temperature
     conf->control1=ControlType::OnOff;  // Control Type for chamber heater
     conf->control2=ControlType::OnOff;  // Control Type for stone heater
   }
@@ -196,8 +207,10 @@ void UpdateParams() {
 
   if (conf->control1==ControlType::OnOff)
     chamberControl=new OnOffControl("chamber",&actChamber,&setChamber,&tempChamber,DELTA);
-  else
+  else if (conf->control1==ControlType::PID)
     chamberControl=new PidControl("chamber",&actChamber,&setChamber,&tempChamber,conf->kp1,conf->ki1,conf->kd1,PID_WINDOW_SIZE);
+  else
+    chamberControl=new PidAutotuneControl("chamber",&actChamber,&setChamber,&tempChamber,conf->kp1,conf->ki1,conf->kd1,PID_WINDOW_SIZE);
 
   
   // Stone control
@@ -206,8 +219,10 @@ void UpdateParams() {
   
   if (conf->control2==ControlType::OnOff)
     stoneControl=new OnOffControl("stone",&actStone,&setChamber,&tempChamber,DELTA);
-  else
+  else if (conf->control2==ControlType::PID)
     stoneControl=new PidControl("stone",&actStone,&setChamber,&tempChamber,conf->kp2,conf->ki2,conf->kd2,PID_WINDOW_SIZE);  
+  else
+    stoneControl=new PidAutotuneControl("stone",&actStone,&setChamber,&tempChamber,conf->kp2,conf->ki2,conf->kd2,PID_WINDOW_SIZE);  
     
 }
 
@@ -217,6 +232,7 @@ void CheckConnectWifi()
 {
   if (WiFi.status() != WL_CONNECTED) {
     WiFi.mode(WIFI_STA);
+    WiFi.hostname("espoven");
     WiFi.begin(SSID, PASSWORD);
   
     Serial.printf("EspOven: Connecting to %s", SSID);
@@ -225,7 +241,7 @@ void CheckConnectWifi()
       delay(500);
       Serial.print(".");
     }
-    Serial.printf("\nEspOven: Connected, IP address: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("\nEspOven: Connected, IP address: %s Hostname %s\n", WiFi.localIP().toString().c_str(),WiFi.hostname().c_str());
   }
 }
 
@@ -300,7 +316,7 @@ void parseQueryString(char *querystring, JsonObject ht) {
 
 
 
-bool HandleCGI(char *path, char *resp) {
+bool HandleCGI(char *path, char *resp, char *body) {
   char buf[256];
   bool handled = true;
 
@@ -312,6 +328,25 @@ bool HandleCGI(char *path, char *resp) {
     sprintf(buf, "{ \"tempChamber\":%f, \"tempStone\":%f,\"timer\":%d,\"chamberStatus\":%d, \"stoneStatus\":%d, \"started\":%d }", tempChamber, tempStone, (timer!=0)?(timer-(millis()-starttimer)/1000):0, chamberStatus,stoneStatus, started);
 
     sprintf(resp, "HTTP/1.1 200 OK\nServer: EspOven (Esp8266)\nContent-Length: %d\nConnection: Closed\nCache-Control: no-cache, no-store, must-revalidate\nContent-Type: application/json\n\n%s", strlen(buf), buf);
+  }
+  else if (strncmp(path, "/getconf.cgi", 12) == 0) {
+    conf->GetJson(buf,256);
+    
+    sprintf(resp, "HTTP/1.1 200 OK\nServer: EspOven (Esp8266)\nContent-Length: %d\nConnection: Closed\nCache-Control: no-cache, no-store, must-revalidate\nContent-Type: application/json\n\n%s", strlen(buf), buf);
+  }
+  else if (strncmp(path, "/setconf.cgi", 12) == 0) {
+    if (!started) {
+      bool res=conf->SetJson(body);
+      if (res) {
+        conf->Save();
+        UpdateParams();
+      }
+      
+      const char *result=res?"true":"false";   
+      sprintf(resp, "HTTP/1.1 200 OK\nServer: EspOven (Esp8266)\nContent-Length: %d\nConnection: Closed\nCache-Control: no-cache, no-store, must-revalidate\nContent-Type: application/json\n\n%s",strlen(result),result);
+    }
+    else
+      sprintf(resp,"HTTP/1.1 405 Not Allowed\nConfiguration can only be changed when oven is turned off\nConnection: Closed\n\n");           
   }
   else if (strncmp(path, "/setparams.cgi", 14) == 0) {
     path += 15; // we skip url
@@ -357,7 +392,7 @@ bool HandleCGI(char *path, char *resp) {
 void handleHttpRequests() {
   int i, len, k;
   char *meth, *path, *ver;
-  char *buf, *resp, *mime;
+  char *buf, *resp, *mime,*body;
   unsigned long start, elapsed;
   double speed;
   File f;
@@ -395,12 +430,11 @@ void handleHttpRequests() {
 
     // AllocMemory
 
-    buf = (char *) os_malloc(8192);
     resp = (char *) os_malloc(512);
     mime = (char *) os_malloc(64);
 
     if (stricmp(meth, "GET") == 0) {
-      if (HandleCGI(path, resp)) {
+      if (HandleCGI(path, resp, NULL)) {
         client.print(resp);
       }
       else if (!SPIFFS.exists(path)) {
@@ -422,27 +456,57 @@ void handleHttpRequests() {
         sprintf(resp, "HTTP/1.1 200 OK\nServer: EspOven (Esp8266)\nContent-Length: %d\nConnection: Closed\nContent-Type: %s\n\n", len, mime);
         client.print(resp);
 
+        buf = (char *) os_malloc(8192);
+
         k = 0;
         while (f.available() > 0) {
           i = f.readBytes(buf, 8192);
-          //Serial.printf("EspOven (%s): read %d bytes to buffer (%d): %02x %02x %02x %02x %02x %02x %02x %02x (freeheap %d)\n",getTimestamp(),i,k,buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7],ESP.getFreeHeap());
 
           client.write((const uint8_t *) buf, i);
-          //Serial.printf("EspOven (%s): written %d bytes to client (%d) (freeheap %d)f\n",getTimestamp(),i,k++,ESP.getFreeHeap());
         }
 
         elapsed = millis() - start;
         speed = len / elapsed;
         Serial.printf("EspOven (%s): transferred %d bytes to client, elapsed %dms speed %.2f KB/s\n", getTimestamp(), len, elapsed, speed);
 
+        os_free(buf);
+
         f.close();
       }
     }
+    if (stricmp(meth, "POST") == 0) {
+        char *header,*value;
+        
+        // Process headers
+        while (true) {
+          String req = client.readStringUntil('\r');
+          header = strtok(&req[0], ":");
+          value = strtok(NULL, "\r");
+
+          Serial.printf("Read header %s value %s\n",header,value);
+          
+          if (strlen(header)==0)
+            break;
+          else if (stricmp(header,"Content-Type")==0 && stricmp(value,"application/json")!=0) {
+            client.print("HTTP/1.1 405 Not Allowed\nAllow: GET, POST (only with application/json)\nConnection: Closed\n\n");           
+            goto end;
+          }
+        }
+
+        body = (char *) os_malloc(512);
+        client.readBytes(body,512);
+        
+        if (HandleCGI(path, resp, body)) {
+          client.print(resp);
+        }
+
+        os_free(body);
+    }
     else {
-      client.print("HTTP/1.1 405 Not Allowed\nAllow: GET\nConnection: Closed\n\n");
+      client.print("HTTP/1.1 405 Not Allowed\nAllow: GET, POST (only with application/json)\nConnection: Closed\n\n");
     }
 
-    os_free(buf);
+end:
     os_free(resp);
     os_free(mime);
   }
