@@ -23,7 +23,7 @@ You have to connect the board to a pc with the a micro USB cable to power it and
 ![espoven board back](https://github.com/user-attachments/assets/5c67778a-48c4-45b2-ba95-79830964ff48)
 ![espoven board detail](https://github.com/user-attachments/assets/e57934db-be83-4762-96b9-8aaaa33e0dae)
 
-# Oven (Proof of concept)
+# Proof of concept using a modded DPE Nerone oven
 
 ![EspOven_Overview](https://github.com/user-attachments/assets/1b5e3519-e3ea-49f9-9dcd-5e72b97ee3c5)
 ![EspOven_Overview_2](https://github.com/user-attachments/assets/a4233ba0-4d09-4150-a704-599cc3ed5887)
